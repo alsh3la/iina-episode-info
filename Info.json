@@ -1,15 +1,15 @@
 {
   "name": "Episode Info",
-  "identifier": "com.Zain-Imam.episodeinfo",
+  "identifier": "com.RS.episodeinfo",
   "version": "1.2.1",
-  "ghRepo": "Zain-Imam/iina-episode-info",
+  "ghRepo": "RS/iina-episode-info",
   "ghVersion": 4,
   "author": {
-    "name": "Zain Imam",
-    "url": "https://github.com/Zain-Imam"
+    "name": "RS",
+    "url": "https://github.com/alsh3la"
   },
   "entry": "main.js",
-  "description": "Episode/movie info overlay on pause. With additional subtitle support.",
+  "description": "Episode/movie info overlay on pause. With additional subtitle support & auto fetch Movie Name",
   "permissions": [
     "show-osd",
     "video-overlay",
