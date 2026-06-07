@@ -844,6 +844,27 @@ iina.onMessage("fileChanged", function(d){
   }
 });
 
+// ── Auto-title (v1.3.0) ───────────────────────────────────────
+// Sent by main.js after file-loaded when no URL-map hit exists.
+// Pre-fills the search box and fires the search automatically so
+// the user sees TMDB results without any typing.
+iina.onMessage("autoTitle", function(d) {
+  if (!d || !d.title) return;
+  if (!TK) return; // TMDB key not set — can't search yet
+
+  // If a saved card is already showing (URL was recognised by
+  // fileChanged), don't stomp on it.
+  var savedEl = document.getElementById("saved");
+  if (savedEl && savedEl.classList.contains("on")) return;
+
+  // Pre-fill search box and trigger search
+  var qEl = document.getElementById("q");
+  if (qEl && !qEl.disabled) {
+    qEl.value = d.title;
+    doSearch();
+  }
+});
+
 // ── API Key ───────────────────────────────────────────────────
 (function initApiKey() {
   var key = localStorage.getItem("epinfo_tmdb_key") || "";
