@@ -1,5 +1,5 @@
 // ============================================================
-// IINA Plugin: Episode Info  v1.2.1
+// IINA Plugin: Episode Info  v1.3.0
 // ============================================================
 
 const { core, event, overlay, sidebar, utils, file } = iina;
@@ -45,7 +45,7 @@ var HTTP_TIMEOUT_MS = 10000; // Per-call budget — sidebar enforces total budge
 // which causes timeouts for fresh content even when the result exists.
 // Per OS team forum post: "we now require to have User-Agent present in
 // requests, set it up to your application/script name with version".
-var OS_USER_AGENT = "EpisodeInfo v1.2.1";
+var OS_USER_AGENT = "EpisodeInfo v1.3.0";
 
 // ── Lazy IMDB ID resolver (v1.2.1) ───────────────────────────
 // Resolves BOTH the show-level (parent) and episode-level IMDB ids from TMDB.
@@ -137,6 +137,7 @@ var overlayVerticalPos = 50;     // 0=top, 50=center, 100=bottom (new in v1.2.0)
 var pauseDelay         = 3;      // seconds before overlay shows on pause (new in v1.2.0)
 var currentVideoUrl    = "";     // url of currently loaded file, sent to sidebar so it can
                                  // restore per-URL TMDB info on re-play (new in v1.2.0)
+var pendingAutoTitle   = "";     // v1.3.0: cached title for replay via sidebarReady
 
 function log(msg) {
   iina.console.log("[EpInfo] " + msg);
@@ -223,6 +224,10 @@ function registerSidebarHandlers() {
   sidebar.onMessage("sidebarReady", function() {
     if (currentVideoUrl) {
       sidebar.postMessage("fileChanged", { url: currentVideoUrl });
+    }
+    // v1.3.0: replay auto-title in case it arrived before handlers were ready
+    if (pendingAutoTitle) {
+      sidebar.postMessage("autoTitle", { title: pendingAutoTitle });
     }
   });
 
@@ -875,11 +880,63 @@ event.on("iina.window-loaded", function() {
 event.on("iina.file-loaded", function() {
   setupSidebar();
   currentEpisode = null;
+  pendingAutoTitle = ""; // v1.3.0: reset for this file
   hideOverlay();
   // Capture URL so sidebar can look it up in its URL→episode map (new in v1.2.0)
   try { currentVideoUrl = core.status.url || ""; } catch(e) { currentVideoUrl = ""; }
   sidebar.postMessage("fileChanged", { url: currentVideoUrl });
   sidebar.postMessage("overlayStatus", { text: "Select an episode, then pause" });
+
+  // ── Auto-title (v1.3.0) ───────────────────────────────────────
+  // Read the player's media-title (set by mpv from filename, stream
+  // title, or --title). Strip common noise so the sidebar can use it
+  // as a TMDB search seed without any manual typing.
+  try {
+    var rawTitle = "";
+    try { rawTitle = iina.mpv.getString("media-title") || ""; } catch(e1) {}
+    if (!rawTitle) {
+      try { rawTitle = core.status.title || ""; } catch(e2) {}
+    }
+    if (rawTitle) {
+      // ── Clean the raw title into a usable search query ──────
+      var cleaned = rawTitle
+
+        // 1. Strip file extension (only when no path sep present,
+        //    i.e. it really is a bare filename)
+        .replace(/\.[a-zA-Z0-9]{2,5}$/, "")
+
+        // 2. Remove bracketed/parenthesised noise tags that media
+        //    players embed: [BluRay], (1080p), [x265], [HEVC], etc.
+        .replace(/[\[\(][^\]\)]{0,40}[\]\)]/g, " ")
+
+        // 3. Normalise separators that scene releases use as spaces
+        //    (dots and underscores between words)
+        .replace(/[._]+/g, " ")
+
+        // 4. Trim trailing episode code and everything after it so
+        //    we search the show title only, not "Breaking Bad S05E08".
+        //    Patterns: S01E02, 1x02, " - Episode 4", season/ep words
+        .replace(/\s*[Ss]\d{1,2}[Ee]\d{1,3}.*/,  "")
+        .replace(/\s*\d{1,2}[xX]\d{1,3}.*/,       "")
+        .replace(/\s*[-–]\s*[Ee]pisode\s*\d.*/i,  "")
+        .replace(/\s*[Ss]eason\s*\d.*/i,          "")
+        .replace(/\s*[Ee]pisode\s*\d.*/i,          "")
+
+        // 5. Strip year if it appears to be trailing metadata
+        //    (e.g. "The Crown 2016" → "The Crown")
+        .replace(/\s+\d{4}\s*$/, "")
+
+        // 6. Collapse whitespace
+        .replace(/\s+/g, " ").trim();
+
+      if (cleaned) {
+        pendingAutoTitle = cleaned;
+        sidebar.postMessage("autoTitle", { title: cleaned });
+      }
+    }
+  } catch(eAuto) {
+    // Non-fatal — sidebar just won't auto-fill
+  }
 });
 
 event.on("mpv.pause.changed", function() {
